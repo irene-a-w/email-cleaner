@@ -22,7 +22,7 @@ layout = [
     [sg.Checkbox('only include unread emails', key='-READ-'), sg.Checkbox('load emails with unsubscribe link', key='-UNSUBLINK-')],
      [sg.Button('search', key='-SEARCHEMAIL-'), sg.Button('delete', key='-DELETE-')],
     [sg.Text('', key='-RESULTSTATUS-')],
-    [sg.Table(headings=['sender', 'count'], values=[], def_col_width=20, auto_size_columns=False, select_mode='extended', enable_events=True, justification='center', key='-TABLE-')]
+    [sg.Table(headings=['sender names', 'email', 'count'], values=[], def_col_width=20, auto_size_columns=False, enable_events=True, justification='center', key='-TABLE-')]
 ]
 
 window = sg.Window('email cleaner', layout)
@@ -51,7 +51,7 @@ def window_main():
                 break
             get_messages(before, after, pattern, unread, timezone)
 
-            if values['-UNSUBLINK-']:
+            if values['-UNSUBLINK-'] and msg_list:
                 table_data = get_unsubscribe_list()
                 window['-TABLE-'].update(table_data)
 
@@ -73,6 +73,10 @@ def window_main():
                 filter = pattern
             delete_messages(labels, filter)
             window['-RESULTSTATUS'].update('finished deleting all found messages.')
+
+        if event == '-TABLE-':
+            selected_index = values['-TABLE-']
+            print(selected_index[0])
 
     window.close()
 
@@ -125,10 +129,8 @@ def get_unsubscribe_list():
         sender_info = senders[1][email]
         occurance = sender_name[email]
         unsub_link = sender_info.unsub_link
-        display = email
-        if len(sender_info.from_name) == 1:
-            display = sender_info.from_name[0]
-        cur = [display, occurance]
+        display = ', '.join(sender_info.from_name)
+        cur = [display, email, occurance]
         if unsub_link:
             table_rows.append(cur)
     return table_rows

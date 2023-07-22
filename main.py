@@ -6,6 +6,7 @@ import base64
 
 from datetime import datetime
 from selenium import webdriver
+from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from google.auth.transport.requests import Request
@@ -75,7 +76,6 @@ def list_messages_by_filter(service, user_id, label_ids, filter, next_page):
 
     if filter['from'] != '':
         query_str += f" from: {filter['from']}"
-    print(filter)
     message_list = service.users().messages().list(userId=user_id, labelIds=label_ids, maxResults=500, pageToken=next_page, q=query_str).execute()
     return message_list
 
@@ -183,12 +183,24 @@ def get_senders_from_message_list(service, msg_list):
             msg_obj.add_from_name(cur_email)
         msg_obj.add_msg_id(msg['id'])
         if not msg_obj.unsub_link and cur_unsub_link:
-            msg_obj.unsub_link = cur_unsub_link
+            # parse to find only the link
+            start_idx = cur_unsub_link.find('https')
+            comma_idx = cur_unsub_link.find(',')
+            if comma_idx > -1 and comma_idx < start_idx:
+                # this case means that the link is in the second half of the list
+                parsed_link = cur_unsub_link[start_idx:-1]
+            elif comma_idx > -1 and comma_idx > start_idx:
+                parsed_link = cur_unsub_link[start_idx:comma_idx-1]
+            else:
+                # check if it has it in there otherwise just leave it lol
+                parsed_link = cur_unsub_link[1:-1]
+            msg_obj.unsub_link = parsed_link
 
     return [sender_count, sender_info]
 
 
 def get_unsubscribe_link(email, sender_info):
+    # sender_info is a dictionary
     sender_obj = sender_info.get(email)
     return sender_obj.unsub_link
 
@@ -199,15 +211,15 @@ def decode_msg(message):
             data = base64.urlsafe_b64decode(p["body"]["data"]).decode("utf-8")
             return data
 
-
 def unsubscribe(link):
     options = Options()
     options.add_experimental_option("detach", True)
     driver = webdriver.Chrome(options=options)
     driver.get(link)
 
+
     # check if the webpage contains any buttons to press
-    check_submit = driver.find_elements(By.XPATH, '//input[@type="submit"]')
+    check_submit = driver.find_elements(By.XPATH, '//button[@type="submit"]') or driver.find_elements(By.XPATH, '//input[@type="button"]')
     # if there is no submit, then successfully unsubscribed
     if len(check_submit) == 0:
         print("unsubscribed.")
@@ -220,15 +232,15 @@ def unsubscribe(link):
             elem.click()
 
     # click submit button
+    hover = ActionChains(driver).move_to_element(check_submit[0])
+    hover.perform()
     check_submit[0].click()
 
     # if page redirects, then print success, otherwise user must manually unsubscribe
-    wait = WebDriverWait(driver, 5)
-    if driver.current_url != link:
-        print("unsubscribed")
-        return True
+    driver.implicitly_wait(5)
+    print("unsubscribed.")
 
-    return False
+    return True
 
 
 def logout():
@@ -258,16 +270,15 @@ def main():
         # try to delete mail
 
 
-    user_timezone = pytz.timezone("US/Central") # need to implement timezone for GUI interface
-    date_dict = {'before': '2023-06-02', 'after': '2023-06-01', 'timezone': user_timezone}
-    msg_by_time = list_messages_by_filter(service, 'me', ['UNREAD'], date_dict, None)
-    print(msg_by_time)
+    # user_timezone = pytz.timezone("US/Central") # need to implement timezone for GUI interface
+    # date_dict = {'before': '2023-06-02', 'after': '2023-06-01', 'timezone': user_timezone}
+    # msg_by_time = list_messages_by_filter(service, 'me', ['UNREAD'], date_dict, None)
+    # print(msg_by_time)
     # cnt = get_total_messages_filter(service, msg_by_time, ['INBOX', 'UNREAD'], date_dict)
     # print(cnt)
     # trash_all_messages(service, msg_by_time, ['INBOX'], date_dict)
         # send_count = get_senders_from_message_list(service, msg_by_time['messages'])
         # print(send_count)
-
     # except HttpError as error:
     #     # TODO handle the error
     #     print(f'An error occurred: {error}')

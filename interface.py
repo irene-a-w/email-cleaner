@@ -4,11 +4,16 @@ import datetime
 import pytz
 import os.path
 
-from main import logout, new_service, list_messages_by_filter, get_total_messages_filter, trash_all_messages, get_senders_from_message_list
+from main import logout, new_service, list_messages_by_filter, get_total_messages_filter, trash_all_messages, get_senders_from_message_list,\
+    get_unsubscribe_link, unsubscribe
+
 
 service = new_service() if os.path.exists("token.json") else None
 connection_msg = 'connected to gmail account' if os.path.exists("token.json") else 'not connected to gmail account'
 msg_list = {}
+sender_info = {}
+found_email_list = []
+selected_email_row = []
 timezones = ['US/Eastern', 'US/Central', 'US/Mountain', 'US/Pacific']
 layout = [
     [sg.Button('connect gmail account', key='-CONNECT-'), sg.Button('logout', key='-CLOSE-'), sg.Text(connection_msg, key='-CONNECTIONSTATUS-')],
@@ -20,14 +25,14 @@ layout = [
         sg.Text('timezone'), sg.OptionMenu(values=timezones, key='-TIMEZONE-')],
     [sg.Text('from:'), sg.Input(key='-FILTERFROM-')],
     [sg.Checkbox('only include unread emails', key='-READ-'), sg.Checkbox('load emails with unsubscribe link', key='-UNSUBLINK-')],
-     [sg.Button('search', key='-SEARCHEMAIL-'), sg.Button('delete', key='-DELETE-')],
+     [sg.Button('search', key='-SEARCHEMAIL-'), sg.Button('delete', key='-DELETE-'), sg.Button('unsubscribe from selected', key='-UNSUBSELECTED-')],
     [sg.Text('', key='-RESULTSTATUS-')],
     [sg.Table(headings=['sender names', 'email', 'count'], values=[], def_col_width=20, auto_size_columns=False, enable_events=True, justification='center', key='-TABLE-')]
 ]
 
 window = sg.Window('email cleaner', layout)
 def window_main():
-    global service
+    global service, found_email_list, selected_email_row
     while True:
         event, values = window.read()
         if event == sg.WIN_CLOSED:
@@ -52,8 +57,8 @@ def window_main():
             get_messages(before, after, pattern, unread, timezone)
 
             if values['-UNSUBLINK-'] and msg_list:
-                table_data = get_unsubscribe_list()
-                window['-TABLE-'].update(table_data)
+                found_email_list = get_unsubscribe_list()
+                window['-TABLE-'].update(found_email_list)
 
 
         if event == '-DELETE-':
@@ -72,11 +77,20 @@ def window_main():
             else:
                 filter = pattern
             delete_messages(labels, filter)
-            window['-RESULTSTATUS'].update('finished deleting all found messages.')
+            window['-RESULTSTATUS-'].update('finished deleting all found messages.')
+
+        if event == '-UNSUBSELECTED-':
+            if selected_email_row:
+                unsub_link = get_unsubscribe_link(selected_email_row[1], sender_info)
+                if unsub_link[:4] == 'http':
+                    unsubscribe(unsub_link)
+                else:
+                    window['-RESULTSTATUS'].update('cannot parse link, please manually unsubscribe.')
 
         if event == '-TABLE-':
             selected_index = values['-TABLE-']
-            print(selected_index[0])
+            selected_email_row = found_email_list[selected_index[0]]
+            print(selected_email_row)
 
     window.close()
 
@@ -121,15 +135,16 @@ def delete_messages(labels, filter):
 
 def get_unsubscribe_list():
     # TODO need to combine sender names if they are the same ... prob have to do that in main
-    global service, msg_list
+    global service, msg_list, sender_info
     senders = get_senders_from_message_list(service, msg_list['messages'])
+    sender_name = senders[0]
+    sender_info = senders[1]
     table_rows = []
     for email in senders[0]:
-        sender_name = senders[0]
-        sender_info = senders[1][email]
+        cur_sender_info = sender_info[email]
         occurance = sender_name[email]
-        unsub_link = sender_info.unsub_link
-        display = ', '.join(sender_info.from_name)
+        unsub_link = cur_sender_info.unsub_link
+        display = ', '.join(cur_sender_info.from_name)
         cur = [display, email, occurance]
         if unsub_link:
             table_rows.append(cur)

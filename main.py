@@ -79,6 +79,10 @@ def list_messages_by_filter(service, user_id, label_ids, filter, next_page):
 
     if filter['from'] != '':
         query_str += f" from: {filter['from']}"
+
+    if filter['category'] != '':
+        query_str += f" category: {filter['category']}"
+
     message_list = service.users().messages().list(userId=user_id, labelIds=label_ids, maxResults=500, pageToken=next_page, q=query_str).execute()
     return message_list
 
@@ -222,7 +226,7 @@ def unsubscribe(link):
 
 
     # check if the webpage contains any buttons to press
-    check_submit = driver.find_elements(By.XPATH, '//button[@type="submit"]') or driver.find_elements(By.XPATH, '//input[@type="button"]')
+    check_submit = driver.find_elements(By.XPATH, '//button[@type="submit"]') or driver.find_elements(By.XPATH, '//input[@type="button"]') or driver.find_elements(By.XPATH, '//input[@type="submit"]')
     # if there is no submit, then successfully unsubscribed
     if len(check_submit) == 0:
         print("unsubscribed.")

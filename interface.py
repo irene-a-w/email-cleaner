@@ -23,7 +23,7 @@ layout = [
         sg.Text('before:'), sg.Input(key='-BEFOREDATE-', size=(10, 5)),
         sg.CalendarButton('calendar', close_when_date_chosen=True,  target='-BEFOREDATE-', format='%Y-%m-%d', no_titlebar=False),
         sg.Text('timezone'), sg.OptionMenu(values=timezones, key='-TIMEZONE-')],
-    [sg.Text('from:'), sg.Input(key='-FILTERFROM-')],
+    [sg.Text('from:'), sg.Input(key='-FILTERFROM-'), sg.Text('category'), sg.OptionMenu(values=['social', 'updates', 'forums', 'promotions'], key='-CATEGORY-')],
     [sg.Checkbox('only include unread emails', key='-READ-'), sg.Checkbox('load emails with unsubscribe link', key='-UNSUBLINK-')],
      [sg.Button('search', key='-SEARCHEMAIL-'), sg.Button('delete', key='-DELETE-'), sg.Button('unsubscribe from selected', key='-UNSUBSELECTED-')],
     [sg.Text('', key='-RESULTSTATUS-')],
@@ -52,9 +52,11 @@ def window_main():
             pattern = values['-FILTERFROM-']
             unread = values['-READ-']
             timezone = values['-TIMEZONE-']
+            category = values['-CATEGORY-']
+
             if (before != '' or after != '') and not timezone:
                 break
-            get_messages(before, after, pattern, unread, timezone)
+            get_messages(before, after, pattern, category, unread, timezone)
 
             if values['-UNSUBLINK-'] and msg_list:
                 found_email_list = get_unsubscribe_list()
@@ -64,28 +66,36 @@ def window_main():
         if event == '-DELETE-':
             before = values['-BEFOREDATE-']
             after = values['-AFTERDATE-']
-            pattern = values['-FILTERFROM-']
+            from_name = values['-FILTERFROM-']
             unread = values['-READ-']
             timezone = values['-TIMEZONE-']
+            category = values['-CATEGORY-']
+            print(category)
             labels = []
             if unread:
                 labels += 'UNREAD'
 
-            if pattern == '':
+            filter = {}
+            if timezone != '':
                 timezone_obj = pytz.timezone(timezone)
-                filter = {'before': before, 'after': after, 'timezone': timezone_obj}
-            else:
-                filter = pattern
+                filter['before'] = before
+                filter['after'] = after
+                filter['timezone'] = timezone_obj
+            if from_name != '':
+                filter['from'] = from_name
+            if category != '':
+                filter['category'] = category
             delete_messages(labels, filter)
             window['-RESULTSTATUS-'].update('finished deleting all found messages.')
 
         if event == '-UNSUBSELECTED-':
             if selected_email_row:
                 unsub_link = get_unsubscribe_link(selected_email_row[1], sender_info)
+                print(unsub_link)
                 if unsub_link[:4] == 'http':
                     unsubscribe(unsub_link)
                 else:
-                    window['-RESULTSTATUS'].update('cannot parse link, please manually unsubscribe.')
+                    window['-RESULTSTATUS-'].update('cannot parse link, please manually unsubscribe.')
 
         if event == '-TABLE-':
             selected_index = values['-TABLE-']
@@ -94,7 +104,7 @@ def window_main():
 
     window.close()
 
-def get_messages(before, after, pattern, unread, timezone):
+def get_messages(before, after, pattern, category, unread, timezone):
     global window, service, msg_list
     if not service:
         return
@@ -119,7 +129,7 @@ def get_messages(before, after, pattern, unread, timezone):
     timezone_obj = ''
     if timezone:
         timezone_obj = pytz.timezone(timezone)
-    filter = {'before': before, 'after': after, 'timezone': timezone_obj, 'from': pattern}
+    filter = {'before': before, 'after': after, 'timezone': timezone_obj, 'from': pattern, 'category': category}
 
     msg_list = list_messages_by_filter(service, 'me', labels, filter, None)
     num_found = get_total_messages_filter(service, msg_list, labels, filter)

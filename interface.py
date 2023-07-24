@@ -130,7 +130,6 @@ def delete_messages(labels, filter):
     global service, msg_list
     trash_all_messages(service, msg_list, labels, filter)
     # reset msg_list after deleting all msgs
-    msg_list = {}
 
 
 def get_unsubscribe_list():

@@ -1,8 +1,12 @@
 from __future__ import print_function
 
 import os.path
-import pytz
 import base64
+import pytz
+import time
+import threading
+import concurrent.futures
+
 
 from datetime import datetime
 from selenium import webdriver
@@ -13,7 +17,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from selenium.webdriver.support.wait import WebDriverWait
 
 from message_data import unsubscribe_list
@@ -50,7 +53,7 @@ def create_service(credentials_info_file, api_name, api_version, scopes):
 
 def list_messages(service, user_id, label_ids, page_token):
     label_ids += ['INBOX']
-    message_list = service.users().messages().list(userId=user_id, labelIds=label_ids, maxResults=500, pageToken=page_token).execute()
+    message_list = service.users().messages().list(userId=user_id, labelIds=label_ids, maxResults=10, pageToken=page_token).execute()
     return message_list
 
 
@@ -101,15 +104,13 @@ def get_message(service, user_id, message_id, format, headers):
     return message
 
 
+# need to make a list of all message id's concurrently
 def trash_message(service, user_id, message_id):
     service.users().messages().trash(userId=user_id, id=message_id).execute()
 
 
 def trash_messages_in_page(service, user_id, msg_list):
-    # todo need to include deleting from next page
-    for msg in msg_list:
-        msg_id = msg['id']
-        trash_message(service, user_id, msg_id)
+    [trash_message(service, user_id, msg['id']) for msg in msg_list]
 
 
 def trash_all_messages(service, msg_list, labels, filter):
@@ -120,8 +121,10 @@ def trash_all_messages(service, msg_list, labels, filter):
         while token:
             cur_page = list_messages_by_filter(service, 'me', labels, filter, token)
             if 'message' in cur_page:
-                trash_messages_in_page(service, 'me', cur_page['messages'])
                 token = cur_page.get("nextPageToken", None)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
+                    _ = [exe.submit(trash_message, service, 'me', msg) for msg in cur_page['messages']]
+
     print("finished deleting all found messages.")
 
 
@@ -271,14 +274,15 @@ def main():
 
 
     # user_timezone = pytz.timezone("US/Central") # need to implement timezone for GUI interface
-    # date_dict = {'before': '2023-06-02', 'after': '2023-06-01', 'timezone': user_timezone}
+    # date_dict = {'before': '2023-07-01', 'after': '2023-03-21', 'timezone': user_timezone, 'from': ''}
     # msg_by_time = list_messages_by_filter(service, 'me', ['UNREAD'], date_dict, None)
     # print(msg_by_time)
-    # cnt = get_total_messages_filter(service, msg_by_time, ['INBOX', 'UNREAD'], date_dict)
+    # cnt = get_total_messages_filter(service, msg_by_time, ['UNREAD'], date_dict)
     # print(cnt)
     # trash_all_messages(service, msg_by_time, ['INBOX'], date_dict)
         # send_count = get_senders_from_message_list(service, msg_by_time['messages'])
         # print(send_count)
+
     # except HttpError as error:
     #     # TODO handle the error
     #     print(f'An error occurred: {error}')
